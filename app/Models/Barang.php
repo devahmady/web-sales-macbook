@@ -9,7 +9,7 @@ class Barang extends Model
 {
     use HasFactory;
     protected $guarded = [];
-
+    
     
     public function category()
     {

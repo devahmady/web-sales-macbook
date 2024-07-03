@@ -6,7 +6,9 @@ use Illuminate\Http\Request;
 use Carbon\Carbon;
 use App\Models\Barang;
 use PDF;
-
+use Maatwebsite\Excel\Facades\Excel;
+use App\Imports\BarangImport;
+use App\Exports\BarangExport;
 class RekapController extends Controller
 {
     public function index(Request $request)
@@ -45,38 +47,22 @@ class RekapController extends Controller
         return view('admin.rekap.index', compact('items', 'tanggalMasukAwalFormatted', 'tanggalMasukAkhirFormatted', 'status', 'totalHargaLunas'));
     }
 
-    public function printPDF(Request $request)
+    public function import(Request $request)
     {
-        $tanggalMasukAwal = $request->input('tanggal_masuk_awal');
-        $tanggalMasukAkhir = $request->input('tanggal_masuk_akhir');
-        $status = $request->input('status');
-    
-        $items = Barang::query();
-    
-        if ($tanggalMasukAwal && $tanggalMasukAkhir) {
-            $items->whereDate('tanggal_masuk', '>=', $tanggalMasukAwal)
-                ->whereDate('tanggal_masuk', '<=', $tanggalMasukAkhir);
+        $request->validate([
+            'file' => 'required|mimes:xls,xlsx',
+        ]);
+
+        try {
+            Excel::import(new BarangImport, $request->file('file'));
+            return redirect()->route('rekap.index')->with('success', 'Data Barang berhasil diimpor!');
+        } catch (\Exception $e) {
+            return redirect()->route('rekap.index')->with('error', 'Terjadi kesalahan: ' . $e->getMessage());
         }
-    
-        if ($status) {
-            $items->where('status', $status);
-        }
-    
-        $items = $items->with('category')->get();
-        $totalHargaLunas = $items->where('status', 'Lunas')->sum('harga');
-        $tanggalMasukAwalFormatted = $tanggalMasukAwal ? Carbon::parse($tanggalMasukAwal)->format('d F Y') : null;
-        $tanggalMasukAkhirFormatted = $tanggalMasukAkhir ? Carbon::parse($tanggalMasukAkhir)->format('d F Y') : null;
-    
-        // Load view menggunakan mPDF
-        $mpdf = new \Mpdf\Mpdf();
-        $html = view('admin.rekap.print', compact('items', 'tanggalMasukAwalFormatted', 'tanggalMasukAkhirFormatted', 'status', 'totalHargaLunas'))->render();
-        $mpdf->WriteHTML($html);
-    
-        // Menentukan cara output (tampilkan di browser atau simpan sebagai file)
-        $mpdf->Output('rekap_barang.pdf', 'I'); // 'I' untuk menampilkan di browser, 'F' untuk menyimpan sebagai file
-    
-        // Jika Anda ingin menyimpan sebagai file:
-        $mpdf->Output(storage_path('app/rekap_barang.pdf'), 'F');
     }
-    
+
+    public function export()
+    {
+        return Excel::download(new BarangExport, 'barang.xlsx');
+    }
 }
